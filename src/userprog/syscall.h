@@ -6,12 +6,12 @@ typedef int tid_t;
 
 void syscall_init (void);
 //project1
-void Halt(void);
-void Exit(int status);
-tid_t Exec(const char* file);
-int Wait(tid_t pid);
-int Write(int fd, void *buffer, unsigned size);
-int Read(int fd, void *buffer, unsigned size);
+void halt(void);
+void exit(int status);
+tid_t exec(const char* file);
+int wait(tid_t pid);
+int write(int fd, void *buffer, unsigned size);
+int read(int fd, void *buffer, unsigned size);
 int is_valid_user_pointer(const void *uaddr);
 int Fibonacci(int n);
 int Max_of_four_int(int a, int b, int c, int d);

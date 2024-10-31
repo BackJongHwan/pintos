@@ -38,103 +38,103 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   //valid
   if(!is_valid_user_pointer(f->esp)){
-    Exit(-1);
+    exit(-1);
   } 
   int syscall_num = *(int*)f->esp;
   switch (syscall_num)
   {
   case SYS_HALT:
-    Halt();
+    halt();
     break;
   case SYS_EXIT:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
     int status = *((int *)(f->esp + 4));
-    Exit(status);
+      exit(status);
     break;
   case SYS_EXEC:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
-    f->eax = Exec(*(const char**)(f->esp + 4));
+    f->eax = exec(*(const char**)(f->esp + 4));
     break;
   case SYS_WAIT:
     if (!is_valid_user_pointer(f->esp + 4)) {
-        Exit(-1);  
+        exit(-1);  
     }
     tid_t tid = *(tid_t *)(f->esp + 4);
-    f->eax = Wait(tid);
+    f->eax = wait(tid);
     break;
   case SYS_WRITE:
     if(!is_valid_user_pointer(f->esp + 4) || !is_valid_user_pointer(f->esp + 8) || !is_valid_user_pointer(f->esp + 12) ){
-      Exit(-1);
+      exit(-1);
     }
-    f->eax = Write(*(int*)(f->esp + 4), *(void**)(f->esp + 8), *(unsigned *)(f->esp + 12));
+    f->eax = write(*(int*)(f->esp + 4), *(void**)(f->esp + 8), *(unsigned *)(f->esp + 12));
     break;
   case SYS_READ:
     if(!is_valid_user_pointer(f->esp + 4) || !is_valid_user_pointer(f->esp + 8) || !is_valid_user_pointer(f->esp + 12) ){
-      Exit(-1);
+      exit(-1);
     }
-    f->eax = Read(*(int*)(f->esp + 4), *(void**)(f->esp + 8), *(unsigned *)(f->esp + 12));
+    f->eax = read(*(int*)(f->esp + 4), *(void**)(f->esp + 8), *(unsigned *)(f->esp + 12));
     break;
   case SYS_FIBO:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = Fibonacci(*(int*)(f->esp + 4));
     break;
   case SYS_MAX_FOUR_INT:
     if(!is_valid_user_pointer(f->esp + 4) ||!is_valid_user_pointer(f->esp + 8) ||!is_valid_user_pointer(f->esp + 12) | !is_valid_user_pointer(f->esp + 16) ){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = Max_of_four_int(*(int*)(f->esp + 4),*(int*)(f->esp + 8), *(int*)(f->esp + 12), *(int*)(f->esp + 16) );
     break;
   case SYS_CREATE:
     if(!is_valid_user_pointer(f->esp+4) || !is_valid_user_pointer(f->esp + 8)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = create(*(const char**)(f->esp + 4), *(unsigned *)(f->esp + 8));
     break;
   case SYS_REMOVE:
     if(!is_valid_user_pointer(f->esp+4)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = remove(*(const char**)(f->esp + 4));
     break;
   case SYS_OPEN:
     if(!is_valid_user_pointer(f->esp+4)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = open(*(const char**)(f->esp + 4));
     break;
   case SYS_CLOSE:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
     close(*(int*)(f->esp + 4));
     break;
   case SYS_FILESIZE:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = filesize(*(int*)(f->esp + 4));
     break;
   case SYS_SEEK:
     if(!is_valid_user_pointer(f->esp+4) || !is_valid_user_pointer(f->esp + 8)){
-      Exit(-1);
+      exit(-1);
     }
     seek(*(int*)(f->esp + 4),*(unsigned *)(f->esp + 8));
     break;
   case SYS_TELL:
     if(!is_valid_user_pointer(f->esp + 4)){
-      Exit(-1);
+      exit(-1);
     }
     f->eax = tell(*(int*)(f->esp + 4));
     break;
   default:
     printf("unknown system call!!\n");
-    Exit(-1);
+    exit(-1);
   }
 }
 
@@ -154,27 +154,27 @@ int is_valid_user_pointer(const void * uaddr){
     return true;
 }
 /*shut down system*/
-void Halt(void){
+void halt(void){
   shutdown_power_off();
 }
 
 /*Terminate current thread*/
-void Exit(int status)
+void exit(int status)
 {
   printf("%s: exit(%d)\n", thread_name(), status);
   thread_current()->exit_status = status;
   thread_exit();
 }
 
-tid_t Exec(const char* file){
+tid_t exec(const char* file){
   // printf("Exec called with file_name: %s\n", file);  // file 값 확인
   if (!is_valid_user_pointer(file)) {
-      Exit(-1);  
+      exit(-1);  
   }
   return process_execute(file);
 }
 
-int Wait(tid_t pid){
+int wait(tid_t pid){
   return process_wait(pid);
 }
 
@@ -182,7 +182,7 @@ int Wait(tid_t pid){
 int Fibonacci(int n){
   if(n < 0){
     printf("invalid input argument!\n");
-    Exit(-1);
+    exit(-1);
   }
   if(n == 0){
     return 0;
@@ -212,9 +212,11 @@ int Max_of_four_int(int a, int b, int c, int d){
 }
 
 int open (const char *file){
+
   if(!is_valid_user_pointer(file)){
-    Exit(-1);
+    exit(-1);
   }
+
   //no availble file descriptor
   if(thread_current()->fd_num >= FD_MAX){
     return -1;
@@ -236,8 +238,8 @@ int open (const char *file){
 
 bool create (const char *file, unsigned initial_size)
 {
-  if (!is_valid_user_pointer(file)) {
-      Exit(-1);  
+  if(!is_valid_user_pointer(file)) {
+    exit(-1);  
   }
   bool success = filesys_create(file, initial_size);
   return success;
@@ -246,7 +248,7 @@ bool create (const char *file, unsigned initial_size)
 bool remove (const char *file)
 {
   if (!is_valid_user_pointer(file)) {
-      Exit(-1);  
+      exit(-1);  
   }
   bool success = filesys_remove(file);
   return success;
@@ -254,36 +256,43 @@ bool remove (const char *file)
 int filesize (int fd)
 {
   if(!thread_current()->fd_table[fd]){
-    Exit(-1);
+    exit(-1);
   }
   return file_length(thread_current()->fd_table[fd]);
 }
 void seek (int fd, unsigned position)
 {
   if(!thread_current()->fd_table[fd]){
-    Exit(-1);
+    exit(-1);
   }
   file_seek(thread_current()->fd_table[fd], position);
 }
 unsigned tell (int fd)
 {
   if(!thread_current()->fd_table[fd]){
-    Exit(-1);
+    exit(-1);
   }
   return(file_tell(thread_current()->fd_table[fd]));
 }
+
 void close (int fd)
 {
+
+  if(fd < 2 || fd >= FD_MAX ){
+    return;
+  }
+
   if(!thread_current()->fd_table[fd]){
-    Exit(-1);
+    return;
   }
   thread_current()->fd_num--;
+  thread_current()->fd_table[fd] = NULL;
   file_close(thread_current()->fd_table[fd]);
 }
 
-int Write(int fd, void *buffer, unsigned size){
+int write(int fd, void *buffer, unsigned size){
   if(fd < 1){
-    Exit(-1);
+    exit(-1);
   }
   //lock 필요함
   //if stdout
@@ -299,10 +308,10 @@ int Write(int fd, void *buffer, unsigned size){
   
 }
 
-int Read(int fd, void *buffer, unsigned size){
+int read(int fd, void *buffer, unsigned size){
 
   if(fd < 0 || fd == 1){
-    Exit(-1);
+    exit(-1);
   }
 
   if(fd == 0){
