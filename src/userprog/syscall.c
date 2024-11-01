@@ -10,7 +10,7 @@
 #include "devices/input.h" //for input_getc()
 #include "userprog/pagedir.h"
 // struct lock print_lock;
-// #include <string.h>
+#include <string.h>
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 // #include"filesys/file.c"
@@ -225,6 +225,14 @@ int open (const char *file){
   if(f == NULL){
     return -1;
   }
+  // if(thread_current()->exec_file == f){
+  //   file_deny_write(f);
+  //   printf("deny write!!");
+  // }else{
+  //   printf("not the same!!");
+
+  // }
+
   for(int i = 2; i < FD_MAX; i++){
     if(thread_current()->fd_table[i] == NULL){
       thread_current()->fd_table[i] = f;
@@ -276,11 +284,9 @@ unsigned tell (int fd)
 
 void close (int fd)
 {
-
-  if(fd < 2 || fd >= FD_MAX ){
+  if(fd < 2 || fd >= FD_MAX){
     return;
   }
-
   if(!thread_current()->fd_table[fd]){
     return;
   }
@@ -290,12 +296,9 @@ void close (int fd)
 }
 
 int write(int fd, void *buffer, unsigned size){
-  if(fd < 1 || fd >= FD_MAX || !is_valid_user_pointer(buffer) ){
+  if(fd < 1 || fd >= FD_MAX || !is_valid_user_pointer(buffer)){
     exit(-1);
   }
-
-
-  
   //lock 필요함
   //if stdout
   if(fd == 1){
