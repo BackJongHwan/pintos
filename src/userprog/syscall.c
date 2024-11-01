@@ -21,7 +21,6 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  // lock_init(&print_lock);
 }
 
 //TODO: syscall_handler implement
@@ -291,26 +290,31 @@ void close (int fd)
 }
 
 int write(int fd, void *buffer, unsigned size){
-  if(fd < 1){
+  if(fd < 1 || fd >= FD_MAX || !is_valid_user_pointer(buffer) ){
     exit(-1);
   }
+
+
+  
   //lock 필요함
   //if stdout
   if(fd == 1){
     putbuf(buffer, size);
     return size;
   }
+
   struct file *f = thread_current()->fd_table[fd];
   if(f == NULL || f->deny_write){
     return 0;
   }
+
   return (file_write(f, buffer, size));
   
 }
 
 int read(int fd, void *buffer, unsigned size){
 
-  if(fd < 0 || fd == 1){
+  if(fd < 0 || fd >= FD_MAX || !is_valid_user_pointer(buffer)){
     exit(-1);
   }
 
@@ -319,8 +323,12 @@ int read(int fd, void *buffer, unsigned size){
       *((char *)buffer + i) = input_getc();
     }
     return size;
-  }else{
-    return(file_read(thread_current()->fd_table[fd], buffer, size));
   }
 
+  struct file *f = thread_current()->fd_table[fd];
+  if(f == NULL){
+    return 0;
+  }
+
+  return(file_read(thread_current()->fd_table[fd], buffer, size));
 }

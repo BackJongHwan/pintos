@@ -144,10 +144,10 @@ page_fault (struct intr_frame *f)
 
   /* Count page faults. */
   page_fault_cnt++;
-   // if (!is_valid_user_pointer(fault_addr)) {
-   //    // Handle invalid access
-   //    Exit(-1);
-   // }
+   if(!is_valid_user_pointer(fault_addr)) {
+      // Handle invalid access
+      exit(-1);
+   }
 
   /* Determine cause. */
   not_present = (f->error_code & PF_P) == 0;
