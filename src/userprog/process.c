@@ -68,7 +68,7 @@ process_execute (const char *file_name)
   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR){
     //thread가 안 만들어지면 복구
-    // file_close(f);
+    file_allow_write(f);
     palloc_free_page (fn_copy);
   }
   palloc_free_page(original_ptr);
@@ -168,9 +168,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
 
-      //모든 file을 닫아줌
+      //when process exit, close all the open files.
       for(int i = 2; i < FD_MAX; i++){
-        if(!cur->fd_table[i])
+        if(cur->fd_table[i])
           file_close(cur->fd_table[i]);
       }
     }

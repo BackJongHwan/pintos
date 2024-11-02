@@ -13,7 +13,10 @@
 #include <string.h>
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-// #include"filesys/file.c"
+#include "threads/synch.h"
+
+struct lock file_lock;
+
 
 static void syscall_handler (struct intr_frame *);
 
@@ -21,6 +24,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&file_lock);
 }
 
 //TODO: syscall_handler implement
@@ -220,17 +224,19 @@ int open (const char *file){
   if(thread_current()->fd_num >= FD_MAX){
     return -1;
   }
+  lock_acquire(&file_lock);
   struct file *f = filesys_open(file);
+  lock_release(&file_lock);
   //if false to open
   if(f == NULL){
     return -1;
   }
+  
   // if(thread_current()->exec_file == f){
   //   file_deny_write(f);
   //   printf("deny write!!");
   // }else{
   //   printf("not the same!!");
-
   // }
 
   for(int i = 2; i < FD_MAX; i++){
@@ -291,8 +297,8 @@ void close (int fd)
     return;
   }
   thread_current()->fd_num--;
-  thread_current()->fd_table[fd] = NULL;
   file_close(thread_current()->fd_table[fd]);
+  thread_current()->fd_table[fd] = NULL;
 }
 
 int write(int fd, void *buffer, unsigned size){
@@ -302,17 +308,23 @@ int write(int fd, void *buffer, unsigned size){
   //lock 필요함
   //if stdout
   if(fd == 1){
+    lock_acquire(&file_lock);
     putbuf(buffer, size);
+    lock_release(&file_lock);
     return size;
   }
-
   struct file *f = thread_current()->fd_table[fd];
-  if(f == NULL || f->deny_write){
+  //deny_write를 file_write내부에서 처리됨
+  // if(f == NULL || f->deny_write){
+  //   return 0;
+  // }
+  if(f == NULL){
     return 0;
   }
-
-  return (file_write(f, buffer, size));
-  
+  lock_acquire(&file_lock);
+  int result = file_write(f, buffer, size);
+  lock_release(&file_lock);
+  return result;
 }
 
 int read(int fd, void *buffer, unsigned size){
@@ -322,9 +334,11 @@ int read(int fd, void *buffer, unsigned size){
   }
 
   if(fd == 0){
+    lock_acquire(&file_lock);
     for(unsigned i = 0; i < size; i++){
       *((char *)buffer + i) = input_getc();
     }
+    lock_release(&file_lock);
     return size;
   }
 
@@ -332,6 +346,8 @@ int read(int fd, void *buffer, unsigned size){
   if(f == NULL){
     return 0;
   }
-
-  return(file_read(thread_current()->fd_table[fd], buffer, size));
+  lock_acquire(&file_lock);
+  int result = file_read(thread_current()->fd_table[fd], buffer, size);
+  lock_release(&file_lock);
+  return result;
 }

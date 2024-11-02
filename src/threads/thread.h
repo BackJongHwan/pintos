@@ -114,10 +114,10 @@ struct thread
     struct semaphore wait;
     struct semaphore exit;
 
+   //project2
     struct file *fd_table[FD_MAX];
     int fd_num;
     struct file *exec_file;
-    
   };
 
 /* If false (default), use round-robin scheduler.
