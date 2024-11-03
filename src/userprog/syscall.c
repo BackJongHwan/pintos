@@ -23,8 +23,8 @@ static void syscall_handler (struct intr_frame *);
 void
 syscall_init (void) 
 {
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init(&file_lock);
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 //TODO: syscall_handler implement
@@ -174,7 +174,10 @@ tid_t exec(const char* file){
   if (!is_valid_user_pointer(file)) {
       exit(-1);  
   }
-  return process_execute(file);
+  // lock_acquire(&file_lock);
+  tid_t t = process_execute(file);
+  // lock_release(&file_lock);
+  return t;
 }
 
 int wait(tid_t pid){
@@ -222,27 +225,24 @@ int open (const char *file){
 
   //no availble file descriptor
   if(thread_current()->fd_num >= FD_MAX){
+    // printf("File descriptor limit reached for file: %s\n", file);
     return -1;
   }
   lock_acquire(&file_lock);
   struct file *f = filesys_open(file);
-  lock_release(&file_lock);
   //if false to open
   if(f == NULL){
+    // printf("Failed to open file: %s\n", file);
+    lock_release(&file_lock);
     return -1;
   }
-  
-  // if(thread_current()->exec_file == f){
-  //   file_deny_write(f);
-  //   printf("deny write!!");
-  // }else{
-  //   printf("not the same!!");
-  // }
+  lock_release(&file_lock);
 
   for(int i = 2; i < FD_MAX; i++){
     if(thread_current()->fd_table[i] == NULL){
       thread_current()->fd_table[i] = f;
       thread_current()->fd_num++;
+      // printf("Opened file: %s with file descriptor %d\n", file, i);
       return i;
     }
   }
@@ -314,10 +314,7 @@ int write(int fd, void *buffer, unsigned size){
     return size;
   }
   struct file *f = thread_current()->fd_table[fd];
-  //deny_write를 file_write내부에서 처리됨
-  // if(f == NULL || f->deny_write){
-  //   return 0;
-  // }
+
   if(f == NULL){
     return 0;
   }

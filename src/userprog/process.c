@@ -59,10 +59,10 @@ process_execute (const char *file_name)
     return TID_ERROR;
   }
 
-  //process execute될 때 쓰기 금지
+  //process execute될 때 쓰기 금지 그 파일에 대한 쓰기 금지
   file_deny_write(f);
-  // printf("file_deny_write called\n");
-  thread_current()->exec_file = f;
+  //parent process가 자식 process를 실행할 때 그 file을 저장함
+  thread_current()->parent_exec_file = f;
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
@@ -91,9 +91,12 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  // printf("load before");
+
   success = load (file_name, &if_.eip, &if_.esp);
-  // printf("after load");
+
+  //현재의 thread가 실행하고 있는 파일에 대한 정보를 저장
+  struct thread *t = thread_current();
+  t->now_exec_file = file_reopen(t->parent->parent_exec_file); // 부모의 파일을 복사
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -139,6 +142,12 @@ process_wait (tid_t child_tid UNUSED)
   }
   sema_down(&child_thread->wait); //waiting for child_thread is dying
   status = child_thread->exit_status;
+
+  //자식 process가 종료될 때 그 파일에 대한 쓰기접근을 허용함
+  if (cur->parent_exec_file != NULL) {
+      file_allow_write(cur->parent_exec_file);
+      // file_close(cur->exec_file);
+  }
   list_remove(e);
   //after remove child in child list, accept child_thread terminate
   sema_up(&child_thread->exit);
