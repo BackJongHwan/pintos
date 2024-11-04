@@ -113,12 +113,14 @@ struct thread
     int exit_status;
     struct semaphore wait;
     struct semaphore exit;
-
+   
    //project2
-    struct file *fd_table[FD_MAX];
-    int fd_num;
-    struct file *parent_exec_file;
-    struct file *now_exec_file;
+    struct file *fd_table[FD_MAX]; /*file descripotr table*/
+    int fd_num; /* # of used fd */
+    struct file *parent_exec_file;/*when this process execute child process, child process's name*/
+    struct file *now_exec_file; /*executing process name */
+    struct semaphore load_sema; //semaphore for loading
+    bool load_flag;
   };
 
 /* If false (default), use round-robin scheduler.

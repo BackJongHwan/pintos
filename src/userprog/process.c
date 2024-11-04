@@ -20,6 +20,7 @@
 //append list structure, string
 #include "lib/kernel/list.h"
 #include "threads/malloc.h"  
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -54,6 +55,7 @@ process_execute (const char *file_name)
   program_name = strtok_r(program_name, " ",&save_ptr);
   struct file *f = filesys_open(program_name);
   if(f == NULL){
+    // thread_current()->exit_status = -1;
     palloc_free_page(fn_copy);
     palloc_free_page(original_ptr);
     return TID_ERROR;
@@ -70,7 +72,33 @@ process_execute (const char *file_name)
     //thread가 안 만들어지면 복구
     file_allow_write(f);
     palloc_free_page (fn_copy);
+    palloc_free_page(original_ptr);
+    return TID_ERROR;
   }
+  //tid로 child thread찾고 semaphore를 down함  process wait에서 사용한 것임
+  struct thread *cur = thread_current();
+  struct thread *child_thread = NULL;
+  struct list_elem *e;
+  for(e = list_begin(&(cur->children_list)); e != list_end(&(cur->children_list));e = list_next(e)){
+    child_thread = list_entry(e, struct thread, child_elem);
+    if(child_thread->tid == tid){
+      break;
+    }
+    child_thread = NULL;
+  }
+  
+  if (child_thread == NULL) {
+    palloc_free_page(original_ptr);
+    return TID_ERROR;
+  }
+   
+  sema_down(&child_thread->load_sema);
+
+  if(!child_thread->load_flag){
+    palloc_free_page(original_ptr);
+    return -1;
+  }
+
   palloc_free_page(original_ptr);
 
   return tid;
@@ -85,6 +113,7 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  struct thread *t = thread_current();
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -92,16 +121,21 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
+  // sema_down(&t->parent->load_sema);
+
   success = load (file_name, &if_.eip, &if_.esp);
-
   //현재의 thread가 실행하고 있는 파일에 대한 정보를 저장
-  struct thread *t = thread_current();
   t->now_exec_file = file_reopen(t->parent->parent_exec_file); // 부모의 파일을 복사
-
+  //load를 완료하고 parent process가 실행 할 수 있도록 sema up을 함.
+  t->load_flag = true;
+  sema_up(&t->load_sema);
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
+    t->load_flag = false;
+    t->exit_status = -1;
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -138,8 +172,9 @@ process_wait (tid_t child_tid UNUSED)
     child_thread = NULL;
   }
   if (child_thread == NULL) {
-    return status;
+    return -1;
   }
+
   sema_down(&child_thread->wait); //waiting for child_thread is dying
   status = child_thread->exit_status;
 
@@ -151,6 +186,7 @@ process_wait (tid_t child_tid UNUSED)
   list_remove(e);
   //after remove child in child list, accept child_thread terminate
   sema_up(&child_thread->exit);
+  
   return status;
 }
 

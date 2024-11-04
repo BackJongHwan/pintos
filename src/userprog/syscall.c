@@ -25,6 +25,7 @@ syscall_init (void)
 {
   lock_init(&file_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
 }
 
 //TODO: syscall_handler implement
@@ -164,8 +165,15 @@ void halt(void){
 /*Terminate current thread*/
 void exit(int status)
 {
+  struct thread *cur = thread_current();
   printf("%s: exit(%d)\n", thread_name(), status);
-  thread_current()->exit_status = status;
+  cur->exit_status = status;
+  //현재 thread가 비정상적으로 종료될 때 자식 thread가 모두 죽고나서 죽어야함
+  struct list_elem *e = NULL;
+  for (e = list_begin(&cur->children_list); e != list_end(&cur->children_list); e = list_next(e)) {
+      struct thread *child = list_entry(e, struct thread, child_elem); 
+      wait(child->tid);
+  }
   thread_exit();
 }
 
