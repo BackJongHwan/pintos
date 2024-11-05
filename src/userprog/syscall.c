@@ -169,11 +169,11 @@ void exit(int status)
   printf("%s: exit(%d)\n", thread_name(), status);
   cur->exit_status = status;
   //현재 thread가 비정상적으로 종료될 때 자식 thread가 모두 죽고나서 죽어야함
-  struct list_elem *e = NULL;
-  for (e = list_begin(&cur->children_list); e != list_end(&cur->children_list); e = list_next(e)) {
-      struct thread *child = list_entry(e, struct thread, child_elem); 
-      wait(child->tid);
-  }
+  // struct list_elem *e = NULL;
+  // for (e = list_begin(&cur->children_list); e != list_end(&cur->children_list); e = list_next(e)) {
+  //     struct thread *child = list_entry(e, struct thread, child_elem); 
+  //     wait(child->tid);
+  // }
   thread_exit();
 }
 

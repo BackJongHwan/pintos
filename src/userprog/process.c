@@ -75,6 +75,8 @@ process_execute (const char *file_name)
     palloc_free_page(original_ptr);
     return TID_ERROR;
   }
+
+
   //tid로 child thread찾고 semaphore를 down함  process wait에서 사용한 것임
   struct thread *cur = thread_current();
   struct thread *child_thread = NULL;
@@ -181,7 +183,6 @@ process_wait (tid_t child_tid UNUSED)
   //자식 process가 종료될 때 그 파일에 대한 쓰기접근을 허용함
   if (cur->parent_exec_file != NULL) {
       file_allow_write(cur->parent_exec_file);
-      // file_close(cur->exec_file);
   }
   list_remove(e);
   //after remove child in child list, accept child_thread terminate
