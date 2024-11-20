@@ -261,6 +261,8 @@ parse_options (char **argv)
 #ifdef USERPROG
       else if (!strcmp (name, "-ul"))
         user_page_limit = atoi (value);
+      else if (!strcmp(name, "-aging"))
+        thread_prior_aging = true;
 #endif
       else
         PANIC ("unknown option `%s' (use -h for help)", name);

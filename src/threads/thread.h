@@ -7,6 +7,11 @@
 
 #include "threads/synch.h"
 
+#ifndef USERPROG
+/* Prject #3. */
+extern bool thread_prior_aging;
+#endif
+
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -104,12 +109,6 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     /* Owned by thread.c. */
-#endif
-    //for waiting
-    unsigned magic;                     /* Detects stack overflow. */
-    struct list children_list;
-    struct list_elem child_elem;
-    struct thread *parent;
     int exit_status;
     struct semaphore wait;
     struct semaphore exit;
@@ -121,6 +120,14 @@ struct thread
     struct file *now_exec_file; /*executing process name */
     struct semaphore load_sema; //semaphore for loading
     bool load_flag;
+#endif
+    //for waiting
+    unsigned magic;                     /* Detects stack overflow. */
+    struct list children_list;
+    struct list_elem child_elem;
+    struct thread *parent;
+    //prj3
+    int64_t wakeup_time;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -158,5 +165,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+//prj3
+bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */

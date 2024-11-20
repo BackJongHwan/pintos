@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "lib/kernel/list.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -25,15 +26,13 @@ static int64_t ticks;
 static unsigned loops_per_tick;
 
 
-/* to implement alarm_list by prj3 */
+/* start 
+  to implement alarm_list by prj3 */
 
-struct alarm_entry {
-    struct list_elem elem;   // List element 
-    struct thread *thread;   // thread
-    int64_t wake_up_time;    // wakeup time
-};
+static struct list sleep_list;
 
-static struct list alarm_list;
+/* end
+*/
 
 
 static intr_handler_func timer_interrupt;
@@ -49,8 +48,9 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-
-  list_init(&alarm_list);
+  // printf("before list_init!\n");
+  list_init(&sleep_list);
+  // printf("after list_init!\n");
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -103,12 +103,24 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  //insert into queue
+  ASSERT(intr_get_level() == INTR_ON);
   int64_t start = timer_ticks ();
-  
-  thread_block();
-  // ineffienct method
+  int64_t wakeup_time = start + ticks;
+  struct thread *cur = thread_current();
+  //insert into sleep_queue
+  // ASSERT (intr_get_level () == INTR_ON);
+  enum intr_level old_level = intr_disable();
+  // 1. thread의 ticks를 포함한 entry만들기
+  cur->wakeup_time = wakeup_time;
+  // 2. insert into sleep_list에 집어넣기
+  // printf("여기는 잘 되나\n");
 
+  list_insert_ordered(&sleep_list, &cur->elem, compare_wake_up_time, NULL);
+  // 3. call thread_block()
+  //thread_block  
+  thread_block();
+  intr_set_level(old_level);
+  // ineffienct method
   // ASSERT (intr_get_level () == INTR_ON);
   // while (timer_elapsed (start) < ticks) 
   //   thread_yield ();
@@ -191,9 +203,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   //find the threads that need to be woken up
   //then insert into ready_list
-  
   ticks++;
   thread_tick ();
+  thread_wake_up();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -265,4 +277,26 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
+}
+
+bool compare_wake_up_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct thread *thread_a = list_entry(a, struct thread, elem);
+    struct thread *thread_b = list_entry(b, struct thread, elem);
+    // ASSERT(thread_a != NULL && thread_b != NULL);
+    // printf("Comparing: %lld vs %lld\n", thread_a->wakeup_time, thread_b->wakeup_time);
+    return thread_a->wakeup_time < thread_b->wakeup_time;
+}
+
+void thread_wake_up(void) {
+    int64_t current_ticks = timer_ticks();
+    // printf("problem in wake_up\n") ;
+    while (!list_empty(&sleep_list)) {
+        struct list_elem *e = list_begin(&sleep_list);
+        struct thread *t = list_entry(e, struct thread, elem);
+        if (t->wakeup_time > current_ticks) {
+            break;
+        }
+        list_remove(e);
+        thread_unblock(t);
+    }
 }

@@ -11,8 +11,10 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include <stdbool.h>
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "devices/timer.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -53,6 +55,11 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+
+#ifndef USERPROG
+/* Prject #3. */
+extern bool thread_prior_aging;
+#endif
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -98,9 +105,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
-
-  
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -140,7 +144,15 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+  
+  // #ifndef USERPROG
+  //   /*Project #3*/
+  //   thread_wake_up();
+  //   if(thread_prior_aging == true)
+  //     thread_aging();
+  // #endif
 }
+
 
 /* Prints thread statistics. */
 void
@@ -209,6 +221,11 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
+  if(thread_current()->priority < t->priority){
+    enum intr_level old_level = intr_disable();
+    thread_yield();
+    intr_set_level(old_level);
+  }
 
   return tid;
 }
@@ -246,7 +263,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, priority_compare, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -319,7 +336,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_compare, NULL);
+    // list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -347,6 +365,21 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  // if thread is in ready_list then pop and push then reorder the ready_list
+  enum intr_level old_level = intr_disable();
+  if(thread_current()->status == THREAD_RUNNING){
+    if (!list_empty(&ready_list)) {
+      struct thread *hightest_thread = list_entry(list_front(&ready_list), struct thread, elem);
+      if (hightest_thread->priority > new_priority) {
+        thread_yield(); // Preempt the current thread if there's a higher-priority thread
+      }
+    }
+  }
+  if(thread_current()->status == THREAD_READY) {
+    list_remove(&thread_current()->elem);
+    list_insert_ordered(&ready_list, &thread_current()->elem, priority_compare, NULL); 
+  }
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -478,13 +511,13 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
-
+  list_init(&t->children_list);
+  #ifdef USERPROG
   sema_init(&(t->wait), 0);
   sema_init(&(t->exit), 0);
   
   sema_init(&(t->load_sema), 0);
   
-  list_init(&t->children_list);
 
 
   //file descriptor 초기화 
@@ -495,6 +528,7 @@ init_thread (struct thread *t, const char *name, int priority)
   // t->fd_table[1] = STDOUT_FILENO;
   //0, 1 is for stdout, stdin
   t->fd_num = 2;
+  #endif
 }
 
 /* Allocates a SIZE-byte frame at the top of initthread T's stack and
@@ -611,3 +645,9 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    const struct thread *thread_a = list_entry(a, struct thread, elem);
+    const struct thread *thread_b = list_entry(b, struct thread, elem);
+    return thread_a->priority > thread_b->priority;  
+}

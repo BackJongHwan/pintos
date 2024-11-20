@@ -4,6 +4,7 @@
 #include <list.h>
 #include <stdbool.h>
 
+
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -47,5 +48,8 @@ void cond_broadcast (struct condition *, struct lock *);
    optimization barrier.  See "Optimization Barriers" in the
    reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
+
+
+/* project3: for priority semaphore */
 
 #endif /* threads/synch.h */
