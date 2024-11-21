@@ -168,5 +168,7 @@ int thread_get_load_avg (void);
 
 //prj3
 bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void priority_preemption(void);
+void thread_aging(void);
 
 #endif /* threads/thread.h */

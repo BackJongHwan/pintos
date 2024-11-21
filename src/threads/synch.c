@@ -112,16 +112,23 @@ sema_up (struct semaphore *sema)
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
-  struct thread *t;
   old_level = intr_disable ();
+
+  
   
   if (!list_empty (&sema->waiters)) {
-    t = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
-    thread_unblock (t);
+    // 디버깅: 대기열의 모든 스레드 우선순위 출력 -> 정렬은 잘 되고 있음
+    // printf("sema_up: Waiters list after sorting:\n");
+    // for (struct list_elem *e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e = list_next(e)) {
+    //     struct thread *t = list_entry(e, struct thread, elem);
+    //     printf(" - Thread %s with priority %d\n", t->name, t->priority);
+    // }
+    struct thread *t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+    thread_unblock(t);
   }
-
+  //순서가 중요 value를 올리고 yield를 할 수 있어야함
   sema->value++;
-
+  priority_preemption();
   intr_set_level (old_level);
 }
 
@@ -323,17 +330,9 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    list_sort(&cond->waiters, priority_compare, NULL);
     struct semaphore_elem *e = list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem);
     sema_up(&e->semaphore);
   }
-  
-  if (!list_empty(&cond->waiters)) {
-      struct thread *t = list_entry(list_front(&cond->waiters), struct thread, elem);
-      if (t->priority > thread_current()->priority) {
-        thread_yield();
-      }
-    }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

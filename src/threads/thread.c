@@ -58,7 +58,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 #ifndef USERPROG
 /* Prject #3. */
-extern bool thread_prior_aging;
+bool thread_prior_aging;
 #endif
 
 /* If false (default), use round-robin scheduler.
@@ -145,12 +145,12 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
   
-  // #ifndef USERPROG
-  //   /*Project #3*/
-  //   thread_wake_up();
-  //   if(thread_prior_aging == true)
-  //     thread_aging();
-  // #endif
+  #ifndef USERPROG
+    /*Project #3*/
+    // thread_wake_up();
+    if(thread_prior_aging == true)
+      thread_aging();
+  #endif
 }
 
 
@@ -221,12 +221,9 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
-  if(thread_current()->priority < t->priority){
-    enum intr_level old_level = intr_disable();
-    thread_yield();
-    intr_set_level(old_level);
-  }
-
+  enum intr_level old_level = intr_disable();
+  priority_preemption();
+  intr_set_level(old_level);
   return tid;
 }
 
@@ -646,8 +643,35 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
+// prirority를 높은 순서로 정렬하기 위한 것
 bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
     const struct thread *thread_a = list_entry(a, struct thread, elem);
     const struct thread *thread_b = list_entry(b, struct thread, elem);
     return thread_a->priority > thread_b->priority;  
+}
+
+/*
+ if ready list's thread's prirority > current's prirority then yield
+*/
+void priority_preemption(void)
+{
+  if(list_empty(&ready_list)){return;}
+
+  struct list_elem* e=list_front(&ready_list);
+  struct thread *t =list_entry(e, struct thread, elem);
+  if(thread_get_priority() < t->priority){
+    thread_yield();
+  }
+}
+
+void thread_aging(void)
+{
+  struct list_elem *e;
+  for(e = list_begin(&ready_list); e != list_end(&ready_list); e = e->next){
+    struct thread *t = list_entry(e, struct thread, elem);
+    if(t->priority < PRI_MAX)
+      t->priority++;
+  }
+  list_sort(&ready_list, priority_compare, NULL);
+  // priority_preemption(); //interrupt 중간이기에 불가능
 }
