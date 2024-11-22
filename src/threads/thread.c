@@ -14,17 +14,25 @@
 #include <stdbool.h>
 #ifdef USERPROG
 #include "userprog/process.h"
-#include "devices/timer.h"
 #endif
+#include "devices/timer.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+#define F (1 << 14)
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/* prj3 start */
+/* List of process using MLFQ*/
+static int load_avg;
+
+/* prj3 end*/
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -105,6 +113,11 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  //
+  initial_thread->nice = NICE_DEFAULT;
+  initial_thread->recent_cpu = 0;
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -151,6 +164,24 @@ thread_tick (void)
     if(thread_prior_aging == true)
       thread_aging();
   #endif
+
+  if(thread_mlfqs == true){
+    //every tick call current_recent_cpu
+    if(thread_current() != idle_thread)
+      current_recent_cpu();
+    
+    //every second call update_load_avg and all_recent_cpu
+    if (timer_ticks() % TIMER_FREQ == 0) {
+      update_load_avg();
+      all_recent_cpu();
+    }
+    
+    //every 4 ticks call calculate_priority_for_all
+    if (timer_ticks() % 4 == 0) { 
+      calculate_priority();
+    }
+  }
+
 }
 
 
@@ -214,6 +245,13 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   t->parent = thread_current();
+  
+  /* prj3 start 
+    inherit nice and recent_cpu from parent
+  */
+  t->nice = thread_current()->nice;
+  t->recent_cpu = thread_current()->recent_cpu;
+  /* prj3 end */
   // printf("Adding thread %d to parent %d's children list\n", t->tid, thread_current()->tid);
   //이 부분에서 오류인데
   // sema_init(&thread_current()->wait, 0);
@@ -372,10 +410,12 @@ thread_set_priority (int new_priority)
       }
     }
   }
+
   if(thread_current()->status == THREAD_READY) {
     list_remove(&thread_current()->elem);
     list_insert_ordered(&ready_list, &thread_current()->elem, priority_compare, NULL); 
   }
+  
   intr_set_level(old_level);
 }
 
@@ -388,33 +428,36 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = new_nice;
+  //TODO: 현재 thread의 priority를 바꾸기..
+  enum intr_level old_level = intr_disable();
+  recalculate_priority();
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  //make it fixed point
+  return fp_to_int_round(mul_fp_int(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  //make it fixed point
+  return fp_to_int_round(mul_fp_int(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -526,6 +569,7 @@ init_thread (struct thread *t, const char *name, int priority)
   //0, 1 is for stdout, stdin
   t->fd_num = 2;
   #endif
+
 }
 
 /* Allocates a SIZE-byte frame at the top of initthread T's stack and
@@ -673,5 +717,150 @@ void thread_aging(void)
       t->priority++;
   }
   list_sort(&ready_list, priority_compare, NULL);
+
   // priority_preemption(); //interrupt 중간이기에 불가능
+  interrupt_yield();
+}
+
+void recalculate_priority(void)
+{
+  struct thread *cur = thread_current();
+
+  //이게 맞긴한데 여기서 좀 더 고쳐야함... 소수떄문에..
+  // int new_priority = PRI_MAX - (cur->recent_cpu / 4) - (cur->nice * 2);
+
+  //using floating point arithmetic
+  int new_priority = PRI_MAX - fp_to_int_round(div_fp_int(cur->recent_cpu, 4)) - cur->nice * 2;
+
+
+  if(new_priority > PRI_MAX) new_priority = PRI_MAX;
+  if(new_priority < PRI_MIN) new_priority = PRI_MIN;
+
+  cur->priority = new_priority;
+  priority_preemption();
+}
+
+void calculate_priority(void)
+{
+  struct list_elem *e;
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = e->next){
+
+    struct thread *t = list_entry(e, struct thread, allelem);
+    //don't need to calculate priority for idle thread
+    if(t == idle_thread) continue;
+
+    //need to change this 
+    // int new_priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
+    //using floating point arithmetic
+    int new_priority = PRI_MAX - fp_to_int_round(div_fp_int(t->recent_cpu, 4)) - t->nice * 2;
+
+    if(new_priority > PRI_MAX) new_priority = PRI_MAX;
+    if(new_priority < PRI_MIN) new_priority = PRI_MIN;
+    t->priority = new_priority;
+  }
+  //priority를 정렬했으므로 call한다
+  //interrupt off
+  interrupt_yield();
+}
+
+void all_recent_cpu(void)
+{
+  struct list_elem *e;
+  for(e = list_begin(&all_list); e != list_end(&all_list); e = e->next){
+    struct thread *t = list_entry(e, struct thread, allelem);
+    
+    if (t == idle_thread) continue;
+    //need to change this
+    // t->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * t->recent_cpu + t->nice;
+    //using floating point arithmetic
+    int double_load_avg = mul_fp_int(load_avg, 2); // 2 * load_avg
+    int coefficient = div_fp(double_load_avg, add_fp_int(double_load_avg, 1)); // (2 * load_avg) / (2 * load_avg + 1)
+    t->recent_cpu = add_fp(mul_fp(coefficient, t->recent_cpu), int_to_fp(t->nice)); // 최종 식
+  }
+}
+
+void current_recent_cpu(void)
+{
+  thread_current()->recent_cpu++;
+}
+
+void update_load_avg(void)
+{
+  int num_ready_threads = list_size(&ready_list);
+  if(thread_current() != idle_thread) num_ready_threads++;
+  // load_avg = (59 * load_avg) / 60 + num_ready_threads;
+  //using floating point arithmetic
+  load_avg = add_fp(mul_fp(div_fp_int(load_avg, 60), 59), div_fp_int(num_ready_threads, 60));
+}
+
+void interrupt_yield(void)
+{
+  //in interrupt context priority preemption
+  if(!list_empty(&ready_list)){
+    struct thread *highest = list_entry(list_front(&ready_list), struct thread, elem);
+    if (highest->priority > thread_current()->priority) {
+      intr_yield_on_return(); // 인터럽트 종료 후 yield를 호출
+    }
+  }
+}
+
+
+int int_to_fp(int n)
+{
+  return n * F;
+}
+
+int fp_to_int_trunc(int x)
+{
+  return x / F;
+}
+
+int fp_to_int_round(int x)
+{
+  if(x >= 0){
+    return (x + F / 2) / F;
+  }
+  else{
+    return (x - F / 2) / F;
+  }
+}
+
+int add_fp(int x, int y)
+{
+  return x + y;
+}
+
+int sub_fp(int x, int y)
+{
+  return x - y;
+}
+
+int mul_fp(int x, int y)
+{
+  return ((int64_t)x) * y / F;
+}
+
+int div_fp(int x, int y)
+{
+  return ((int64_t)x) * F / y;
+}
+
+int add_fp_int(int x, int n)
+{
+  return x + n * F;
+}
+
+int sub_fp_int(int x, int n)
+{
+  return x - n * F;
+}
+
+int mul_fp_int(int x, int n)
+{
+  return x * n;
+}
+
+int div_fp_int(int x, int n)
+{
+  return x / n;
 }

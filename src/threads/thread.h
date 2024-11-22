@@ -36,6 +36,11 @@ typedef int tid_t;
 //max filedescriptor per process
 #define FD_MAX 128
 
+/*Thread nice value*/
+#define NICE_MIN -20
+#define NICE_DEFAULT 0
+#define NICE_MAX 20
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -128,6 +133,8 @@ struct thread
     struct thread *parent;
     //prj3
     int64_t wakeup_time;
+    int nice;
+    int recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -170,5 +177,32 @@ int thread_get_load_avg (void);
 bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void priority_preemption(void);
 void thread_aging(void);
+
+
+void recalculate_priority(void);
+
+void calculate_priority(void);
+
+void current_recent_cpu(void);
+
+void all_recent_cpu(void);
+void update_load_avg(void);
+
+void interrupt_yield(void);
+
+
+int int_to_fp(int n);
+int fp_to_int_trunc(int x);
+int fp_to_int_round(int x);
+
+int add_fp(int x, int y);
+int sub_fp(int x, int y);
+int mul_fp(int x, int y);
+int div_fp(int x, int y);
+
+int add_fp_int(int x, int n);
+int sub_fp_int(int x, int n);
+int mul_fp_int(int x, int n);
+int div_fp_int(int x, int n);
 
 #endif /* threads/thread.h */
