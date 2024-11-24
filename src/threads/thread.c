@@ -30,7 +30,7 @@ static struct list ready_list;
 
 /* prj3 start */
 /* List of process using MLFQ*/
-static int load_avg;
+int load_avg;
 
 /* prj3 end*/
 
@@ -107,6 +107,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -114,10 +115,10 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-  //
+  /* prj3 start */
   initial_thread->nice = NICE_DEFAULT;
   initial_thread->recent_cpu = 0;
-  load_avg = 0;
+  /* prj3 end */
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -130,9 +131,10 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
+  load_avg = 0;
+
   /* Start preemptive thread scheduling. */
   intr_enable ();
-
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
 }
@@ -167,8 +169,7 @@ thread_tick (void)
 
   if(thread_mlfqs == true){
     //every tick call current_recent_cpu
-    if(thread_current() != idle_thread)
-      current_recent_cpu();
+    current_recent_cpu();
     
     //every second call update_load_avg and all_recent_cpu
     if (timer_ticks() % TIMER_FREQ == 0) {
@@ -252,16 +253,13 @@ thread_create (const char *name, int priority,
   t->nice = thread_current()->nice;
   t->recent_cpu = thread_current()->recent_cpu;
   /* prj3 end */
-  // printf("Adding thread %d to parent %d's children list\n", t->tid, thread_current()->tid);
-  //이 부분에서 오류인데
-  // sema_init(&thread_current()->wait, 0);
   list_push_back(&thread_current()->children_list, &t->child_elem);
   
   /* Add to run queue. */
   thread_unblock (t);
-  enum intr_level old_level = intr_disable();
-  priority_preemption();
-  intr_set_level(old_level);
+  if(thread_current()->priority < t->priority){
+    thread_yield();
+  }
   return tid;
 }
 
@@ -432,9 +430,8 @@ thread_set_nice (int new_nice)
 {
   thread_current()->nice = new_nice;
   //TODO: 현재 thread의 priority를 바꾸기..
-  enum intr_level old_level = intr_disable();
   recalculate_priority();
-  intr_set_level(old_level);
+  priority_preemption();
 }
 
 /* Returns the current thread's nice value. */
@@ -730,14 +727,17 @@ void recalculate_priority(void)
   // int new_priority = PRI_MAX - (cur->recent_cpu / 4) - (cur->nice * 2);
 
   //using floating point arithmetic
-  int new_priority = PRI_MAX - fp_to_int_round(div_fp_int(cur->recent_cpu, 4)) - cur->nice * 2;
-
-
+  //for debugging
+  // printf("Thread %s: recent_cpu=%d, nice=%d priority=%d\n", cur->name, cur->recent_cpu, cur->nice, cur->priority);
+  int second = div_fp_int(cur->recent_cpu, 4);
+  int third = cur->nice *  2;
+  int new_priority = sub_fp_int(sub_fp(int_to_fp(PRI_MAX), second),third);
+  new_priority = fp_to_int_round(new_priority);
+  // printf("new priority : %d\n", new_priority);
+  
   if(new_priority > PRI_MAX) new_priority = PRI_MAX;
   if(new_priority < PRI_MIN) new_priority = PRI_MIN;
-
   cur->priority = new_priority;
-  priority_preemption();
 }
 
 void calculate_priority(void)
@@ -748,11 +748,13 @@ void calculate_priority(void)
     struct thread *t = list_entry(e, struct thread, allelem);
     //don't need to calculate priority for idle thread
     if(t == idle_thread) continue;
-
     //need to change this 
     // int new_priority = PRI_MAX - (t->recent_cpu / 4) - (t->nice * 2);
     //using floating point arithmetic
-    int new_priority = PRI_MAX - fp_to_int_round(div_fp_int(t->recent_cpu, 4)) - t->nice * 2;
+    int second = div_fp_int(t->recent_cpu, 4);
+    int third = t->nice *  2;
+    int new_priority = sub_fp_int(sub_fp(int_to_fp(PRI_MAX), second),third);
+    new_priority = fp_to_int_round(new_priority);
 
     if(new_priority > PRI_MAX) new_priority = PRI_MAX;
     if(new_priority < PRI_MIN) new_priority = PRI_MIN;
@@ -760,6 +762,7 @@ void calculate_priority(void)
   }
   //priority를 정렬했으므로 call한다
   //interrupt off
+  list_sort(&ready_list, priority_compare, NULL);
   interrupt_yield();
 }
 
@@ -773,24 +776,36 @@ void all_recent_cpu(void)
     //need to change this
     // t->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * t->recent_cpu + t->nice;
     //using floating point arithmetic
-    int double_load_avg = mul_fp_int(load_avg, 2); // 2 * load_avg
-    int coefficient = div_fp(double_load_avg, add_fp_int(double_load_avg, 1)); // (2 * load_avg) / (2 * load_avg + 1)
-    t->recent_cpu = add_fp(mul_fp(coefficient, t->recent_cpu), int_to_fp(t->nice)); // 최종 식
+    //
+    int num = mul_fp_int(load_avg, 2);
+    int denum = add_fp_int(num, 1);
+    int coeff = div_fp(num, denum);
+    t->recent_cpu = add_fp_int(mul_fp(coeff, t->recent_cpu), t->nice);
+    // printf("Thread %s: recent_cpu=%d, nice=%d\n", t->name, t->recent_cpu, t->nice);
   }
 }
 
 void current_recent_cpu(void)
 {
-  thread_current()->recent_cpu++;
+  //if thread is idle thread then return
+  if(thread_current() == idle_thread) return;
+  //else current thread's recent_cpu + 1
+  thread_current()->recent_cpu = add_fp_int(thread_current()->recent_cpu, 1);
 }
 
 void update_load_avg(void)
 {
+  // printf("update_load_avg\n");
+  // printf("current load_avg : %d\n", load_avg);
   int num_ready_threads = list_size(&ready_list);
   if(thread_current() != idle_thread) num_ready_threads++;
-  // load_avg = (59 * load_avg) / 60 + num_ready_threads;
-  //using floating point arithmetic
-  load_avg = add_fp(mul_fp(div_fp_int(load_avg, 60), 59), div_fp_int(num_ready_threads, 60));
+  // printf("num_ready_threads : %d\n", num_ready_threads);
+  int load_coeff = div_fp(int_to_fp(59), int_to_fp(60)); // 59/60
+  // printf("load_coeff : %d\n", load_coeff);
+  int ready_coeff = div_fp(int_to_fp(1), int_to_fp(60)); // 1/60
+  // printf("ready_coeff : %d\n", ready_coeff);
+  load_avg = add_fp(mul_fp(load_coeff, load_avg), mul_fp_int(ready_coeff, num_ready_threads));
+  // printf("new load_avg : %d\n", load_avg);
 }
 
 void interrupt_yield(void)
@@ -804,10 +819,10 @@ void interrupt_yield(void)
   }
 }
 
-
+/*fixed point arithmetic start*/
 int int_to_fp(int n)
 {
-  return n * F;
+  return n * F; 
 }
 
 int fp_to_int_trunc(int x)
@@ -817,12 +832,7 @@ int fp_to_int_trunc(int x)
 
 int fp_to_int_round(int x)
 {
-  if(x >= 0){
-    return (x + F / 2) / F;
-  }
-  else{
-    return (x - F / 2) / F;
-  }
+  return (x >= 0) ? (x + F / 2) / F : (x - F / 2) / F;
 }
 
 int add_fp(int x, int y)
@@ -864,3 +874,5 @@ int div_fp_int(int x, int n)
 {
   return x / n;
 }
+
+/*fixed point arithmetic end*/
