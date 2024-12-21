@@ -177,7 +177,7 @@ int thread_get_load_avg (void);
 bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void priority_preemption(void);
 void thread_aging(void);
-
+void interrupt_yield(void);
 
 void recalculate_priority(void);
 

@@ -22,6 +22,8 @@
 #include "threads/malloc.h"  
 #include "userprog/syscall.h"
 
+#include "vm/frame.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -132,7 +134,7 @@ start_process (void *file_name_)
   t->load_flag = true;
   sema_up(&t->load_sema);
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page(file_name);
   if (!success) {
     t->load_flag = false;
     t->exit_status = -1;
@@ -625,14 +627,19 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
+
+      // uint8_t *kpage = palloc_get_page (PAL_USER);
+      // printf("upage: %p\n", upage);
+      uint8_t *kpage = frame_alloc(upage, PAL_USER);
+
       if (kpage == NULL)
         return false;
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          // palloc_free_page (kpage);
+          frame_free(kpage);
           return false; 
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
@@ -640,7 +647,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          // palloc_free_page (kpage);
+          frame_free(kpage);
           return false; 
         }
 
@@ -660,14 +668,17 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  // kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  // frame_alloc을 이용하여 kpage를 할당 upage는 PHYS_BASE - PGSIZE stack은 위에서 아래로 증가하기 때문에
+  kpage = frame_alloc(((uint8_t *) PHYS_BASE) - PGSIZE, PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        // palloc_free_page (kpage);
+        frame_free(kpage);
     }
   return success;
 }
