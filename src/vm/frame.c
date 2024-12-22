@@ -49,6 +49,7 @@ void *frame_alloc(uint8_t *page, bool zero) {
     fte->page = page;
     fte->owner = thread_current();
     fte->accessed = true;
+    fte->pinned = false;
     list_push_back(&frame_table, &fte->elem);
 
     lock_release(&frame_table_lock);

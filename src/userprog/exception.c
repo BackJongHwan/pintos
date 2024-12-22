@@ -7,6 +7,11 @@
 
 #include"userprog/syscall.h"
 
+#include"threads/vaddr.h"
+#include"vm/frame.h"
+#include"vm/page.h"
+#include"vm/swap.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -165,5 +170,22 @@ page_fault (struct intr_frame *f)
 //           write ? "writing" : "reading",
 //           user ? "user" : "kernel");
 //   kill (f);
+
+   //upage is the page that fault_addr belongs to
+   void *upage = pg_round_down(fault_addr);
+
+   struct thread *cur = thread_current();
+   struct spt_entry *spte = spt_find(upage);
+
+   if(spte == NULL){
+      //if not found in spt, it is stack growth
+      kill(f);
+   }else{
+      handle_mm_fault(spte, upage);
+   }
+   kill(f);
 }
 
+void handle_mm_fault(struct spt_entry*spte, void *upage){
+   
+}

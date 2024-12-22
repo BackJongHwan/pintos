@@ -17,6 +17,10 @@
 #endif
 #include "devices/timer.h"
 
+#ifdef VM
+#include "vm/page.h"
+#endif
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -260,6 +264,7 @@ thread_create (const char *name, int priority,
   if(thread_current()->priority < t->priority){
     priority_preemption();
   }
+  hash_init(&t->spt, spt_hash_func, spt_less_func, NULL);
   return tid;
 }
 
@@ -565,7 +570,6 @@ init_thread (struct thread *t, const char *name, int priority)
   //0, 1 is for stdout, stdin
   t->fd_num = 2;
   #endif
-
 }
 
 /* Allocates a SIZE-byte frame at the top of initthread T's stack and
@@ -877,3 +881,13 @@ int div_fp_int(int x, int n)
 }
 
 /*fixed point arithmetic end*/
+unsigned spt_hash_func(const struct hash_elem *e, void *aux){
+    struct spt_entry *spte = hash_entry(e, struct spt_entry, elem);
+    return hash_bytes(&spte->upage, sizeof(spte->upage));
+}
+
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux){
+    struct spt_entry *spte_a = hash_entry(a, struct spt_entry, elem);
+    struct spt_entry *spte_b = hash_entry(b, struct spt_entry, elem);
+    return spte_a->upage < spte_b->upage;
+}

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "threads/synch.h"
+#include <hash.h>
 
 #ifndef USERPROG
 /* Prject #3. */
@@ -135,6 +136,9 @@ struct thread
     int64_t wakeup_time;
     int nice;
     int recent_cpu;
+    #ifdef VM
+      struct hash spt;
+    #endif
   };
 
 /* If false (default), use round-robin scheduler.
@@ -204,5 +208,9 @@ int add_fp_int(int x, int n);
 int sub_fp_int(int x, int n);
 int mul_fp_int(int x, int n);
 int div_fp_int(int x, int n);
+
+//prj4
+unsigned spt_hash_func(const struct hash_elem *e, void *aux);
+bool spt_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
 #endif /* threads/thread.h */

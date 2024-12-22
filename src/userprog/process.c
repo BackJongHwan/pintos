@@ -23,6 +23,7 @@
 #include "userprog/syscall.h"
 
 #include "vm/frame.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -138,7 +139,6 @@ start_process (void *file_name_)
   if (!success) {
     t->load_flag = false;
     t->exit_status = -1;
-    thread_exit ();
   }
 
   /* Start the user process by simulating a return from an
@@ -221,6 +221,8 @@ process_exit (void)
         if(cur->fd_table[i])
           file_close(cur->fd_table[i]);
       }
+      //when process exit, free supplementary page table 
+      spt_destroy(&cur->spt);
     }
 }
 
@@ -629,30 +631,49 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Get a page of memory. */
 
       // uint8_t *kpage = palloc_get_page (PAL_USER);
-      // printf("upage: %p\n", upage);
-      uint8_t *kpage = frame_alloc(upage, PAL_USER);
+      // uint8_t *kpage = frame_alloc(upage, PAL_USER);
+      
+      struct spt_entry *spte = malloc(sizeof(struct spt_entry));
 
-      if (kpage == NULL)
+      //if memory allocation failed
+      if (spte == NULL)
         return false;
+      
+      spte->upage = upage;
+      spte->status = FILE;
+      spte->writable = writable;
+      spte->file = file;
+      spte->offset = ofs;
+      spte->read_bytes = page_read_bytes;
+      spte->zero_bytes = page_zero_bytes;
 
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          // palloc_free_page (kpage);
-          frame_free(kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      // memory에 load하는 것은 page fault가 발생했을 때 처리함
+      
+      // /* Load this page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     // palloc_free_page (kpage);
+      //     frame_free(kpage);
+      //     return false; 
+      //   }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          // palloc_free_page (kpage);
-          frame_free(kpage);
-          return false; 
-        }
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     // palloc_free_page (kpage);
+      //     frame_free(kpage);
+      //     return false; 
+      //   }
+
+      //make spte and insert it to spt
+      if(!spt_insert(spte)){
+        free(spte);
+        return false;
+      }
 
       /* Advance. */
+      ofs += page_read_bytes;
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;

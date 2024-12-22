@@ -3,6 +3,7 @@
 
 #include <list.h>
 #include <stdbool.h>
+#include <bitmap.h>
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/palloc.h"
@@ -14,7 +15,9 @@ struct frame_table_entry {
     struct list_elem elem;    // Element for list
     struct thread *owner;     // Thread that owns the frame
     bool accessed;            // Accessed bit 
+    bool pinned;
 };
+
 
 /* Functions to manage the frame table */
 void frame_table_init(void);
