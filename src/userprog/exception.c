@@ -11,10 +11,9 @@
 #include"vm/frame.h"
 #include"vm/page.h"
 #include"vm/swap.h"
-
 #include <stdlib.h>
 #include <stdbool.h>
-// #include "userprog/process.h"
+#include "userprog/process.h"
 
 
 /* Number of page faults processed. */
@@ -176,6 +175,12 @@ page_fault (struct intr_frame *f)
       // Handle invalid access
       exit(-1);
    }
+
+   //not_present인 경우 read-only page에 write를 시도한 경우
+   if(!not_present){
+      // Handle page not present
+      exit(-1);
+   }
    // //upage is the page that fault_addr belongs to
    void *upage = pg_round_down(fault_addr);
    struct spt_entry *spte = spt_find(upage);
@@ -183,22 +188,22 @@ page_fault (struct intr_frame *f)
    // //PTE가 없는 경우
    if(spte == NULL){
       // Handle stack growth
-      if(upage >= f->esp - 32 && upage >= PHYS_BASE - 0x800000){
-         void *kpage = frame_alloc(upage, true);
-         if(kpage == NULL){
-            exit(-1);
-         }
-         spte = malloc(sizeof(struct spt_entry));
-         if(spte == NULL){
-            frame_free(kpage);
-            exit(-1);
-         }
-         spte->upage = upage;
-         spte->status = ZERO;
-         spte->writable = true;
-         spt_insert(&thread_current()->spt);
-         return;
-      }
+      // if(upage >= f->esp - 32 && upage >= PHYS_BASE - 0x800000){
+      //    void *kpage = frame_alloc(upage, true);
+      //    if(kpage == NULL){
+      //       exit(-1);
+      //    }
+      //    spte = malloc(sizeof(struct spt_entry));
+      //    if(spte == NULL){
+      //       frame_free(kpage);
+      //       exit(-1);
+      //    }
+      //    spte->upage = upage;
+      //    spte->status = ZERO;
+      //    spte->writable = true;
+      //    spt_insert(spte);
+      //    return;
+      // }
       exit(-1);
    }
    //PTE가 있는 경우
@@ -225,9 +230,9 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
          if(spte->file == NULL){
             exit(-1);
          }
-
+   
          file_seek(spte->file, spte->offset);
-
+         
          if(file_read(spte->file, kpage, spte->read_bytes) != (int) spte->read_bytes){
             frame_free(kpage);
             exit(-1);
@@ -235,10 +240,11 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
 
          memset(kpage + spte->read_bytes, 0, spte->zero_bytes);
 
-         if(!install_page(upage, kpage, spte->writable)){
+         if(!make_file_page(upage, kpage, spte->writable)){
             frame_free(kpage);
             exit(-1);
          }
+
          spte->status = LOAD;
          break;
 

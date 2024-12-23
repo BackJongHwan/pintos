@@ -723,3 +723,7 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+bool make_file_page(void *upage, void *kpage, bool writable){
+  return install_page(upage, kpage, writable);
+}

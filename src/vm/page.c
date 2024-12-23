@@ -13,8 +13,8 @@
 bool spt_insert(struct spt_entry *spte){
     struct thread *t = thread_current();
     struct hash *spt = &t->spt;
-    struct hash_elem *prev = hash_insert(spt, &spte->elem);
-    return prev == NULL;
+    struct hash_elem *e = hash_insert(spt, &spte->elem);
+    return e == NULL;
 }
 
 struct spt_entry *spt_find(void *upage){
