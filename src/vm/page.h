@@ -8,8 +8,8 @@
 enum page_status{
     LOAD,  // memory에 load되어 있는 상태
     SWAP,  // swap disk 에 있는 상태
-    UNALLOCATED, // mapping된 page가 없는 상태
-    FILE   // file에 mapping된 상태
+    FILE,   // file에 mapping된 상태
+    ZERO
 };
 
 

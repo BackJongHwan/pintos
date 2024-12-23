@@ -17,14 +17,14 @@ bool spt_insert(struct spt_entry *spte){
     return prev == NULL;
 }
 
-// struct spt_entry *spt_find(void *upage){
-//     struct thread *t = thread_current();
-//     struct hash *spt = &t->spt;
-//     struct spt_entry spte;
-//     spte.upage = upage;
-//     struct hash_elem *e = hash_find(spt, &spte.elem);
-//     return e != NULL ? hash_entry(e, struct spt_entry, elem) : NULL;
-// }
+struct spt_entry *spt_find(void *upage){
+    struct thread *t = thread_current();
+    struct hash *spt = &t->spt;
+    struct spt_entry temp_spte;
+    temp_spte.upage = upage;
+    struct hash_elem *e = hash_find(spt, &temp_spte.elem);
+    return e != NULL ? hash_entry(e, struct spt_entry, elem) : NULL;
+}
 
 void spt_destroy(struct hash *spt){
 

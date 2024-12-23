@@ -25,11 +25,7 @@ void *frame_alloc(uint8_t *page, bool zero) {
     /* Allocate a physical frame */
     ASSERT(page != NULL);
 
-    if(zero) {
-        frame = palloc_get_page(PAL_USER | PAL_ZERO);
-    } else {
-        frame = palloc_get_page(PAL_USER);
-    }
+    frame = zero ? palloc_get_page(PAL_USER | PAL_ZERO) : palloc_get_page(PAL_USER);
     if(frame == NULL){  
         // frame = frame_evict();
         // if (frame == NULL) {

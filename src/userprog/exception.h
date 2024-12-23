@@ -9,6 +9,4 @@
 void exception_init (void);
 void exception_print_stats (void);
 
-void handle_mm_fault(struct spt_entry *spte, void *upage);
-
 #endif /* userprog/exception.h */

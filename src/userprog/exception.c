@@ -12,6 +12,11 @@
 #include"vm/page.h"
 #include"vm/swap.h"
 
+#include <stdlib.h>
+#include <stdbool.h>
+// #include "userprog/process.h"
+
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -150,10 +155,6 @@ page_fault (struct intr_frame *f)
 
   /* Count page faults. */
   page_fault_cnt++;
-   if(!is_valid_user_pointer(fault_addr)) {
-      // Handle invalid access
-      exit(-1);
-   }
 
   /* Determine cause. */
   not_present = (f->error_code & PF_P) == 0;
@@ -171,21 +172,77 @@ page_fault (struct intr_frame *f)
 //           user ? "user" : "kernel");
 //   kill (f);
 
-   //upage is the page that fault_addr belongs to
+   if(!is_valid_user_pointer(fault_addr)) {
+      // Handle invalid access
+      exit(-1);
+   }
+   // //upage is the page that fault_addr belongs to
    void *upage = pg_round_down(fault_addr);
-
-   struct thread *cur = thread_current();
    struct spt_entry *spte = spt_find(upage);
 
+   // //PTE가 없는 경우
    if(spte == NULL){
-      //if not found in spt, it is stack growth
-      kill(f);
-   }else{
+      // Handle stack growth
+      if(upage >= f->esp - 32 && upage >= PHYS_BASE - 0x800000){
+         void *kpage = frame_alloc(upage, true);
+         if(kpage == NULL){
+            exit(-1);
+         }
+         spte = malloc(sizeof(struct spt_entry));
+         if(spte == NULL){
+            frame_free(kpage);
+            exit(-1);
+         }
+         spte->upage = upage;
+         spte->status = ZERO;
+         spte->writable = true;
+         spt_insert(&thread_current()->spt);
+         return;
+      }
+      exit(-1);
+   }
+   //PTE가 있는 경우
+   else{
       handle_mm_fault(spte, upage);
    }
-   kill(f);
 }
 
 void handle_mm_fault(struct spt_entry*spte, void *upage){
-   
+   ASSERT(spte->status != LOAD);
+   switch (spte->status)
+   {
+      //file에 존재하는 page의 경우
+      //아직 memory에 load되지 않은 경우
+      case FILE:
+         //physical frame을 할당받아서 file에서 읽어서 memory에 load 
+         void *kpage = frame_alloc(upage, false);
+         spte->writable = true;
+
+         if(kpage == NULL){
+            exit(-1);
+         }
+         //file이 존재하지 않으면
+         if(spte->file == NULL){
+            exit(-1);
+         }
+
+         file_seek(spte->file, spte->offset);
+
+         if(file_read(spte->file, kpage, spte->read_bytes) != (int) spte->read_bytes){
+            frame_free(kpage);
+            exit(-1);
+         }
+
+         memset(kpage + spte->read_bytes, 0, spte->zero_bytes);
+
+         if(!install_page(upage, kpage, spte->writable)){
+            frame_free(kpage);
+            exit(-1);
+         }
+         spte->status = LOAD;
+         break;
+
+   }
+   // ASSERT(kpage != NULL);
+   //restart process
 }
