@@ -6,7 +6,6 @@
 struct swap_table{
     struct bitmap *swap_bitmap;
     struct block *swap_disk;
-    struct lock swap_lock;
 };
 
 

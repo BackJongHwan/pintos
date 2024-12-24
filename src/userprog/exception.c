@@ -222,6 +222,7 @@ page_fault (struct intr_frame *f)
    }
    //PTE가 있는 경우
    else{
+      printf("handle_mm_fault\n");
       handle_mm_fault(spte, upage);
    }
 }
@@ -236,6 +237,7 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
       //아직 memory에 load되지 않은 경우
       void *kpage;
       case FILE:
+         printf("file\n");
          //physical frame을 할당받아서 file에서 읽어서 memory에 load 
          kpage = frame_alloc(upage, false);
          // spte->writable = true;
@@ -264,19 +266,25 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
          spte->status = LOAD;
          break;
       case SWAP:
-         // printf("swap page \n");
-         //physical frame을 할당받아서 swap disk에서 읽어서 memory에 load
+         //swap disk에서 읽어서 memory에 load
+         printf("SWAP!!\n");
          kpage = frame_alloc(upage, false);
          if(kpage == NULL){
             exit(-1);
          }
+
+         swap_in(spte->swap_slot, kpage);
+
          if(!make_file_page(upage, kpage, spte->writable)){
             frame_free(kpage);
             exit(-1);
          }
          spte->status = LOAD;
+         spte->swap_slot = -1;
+         printf("SWAP success!!\n");
          break;
       case ZERO:
+         printf("ZERO\n");
          //physical frame을 할당받아서 0으로 초기화
          kpage = frame_alloc(upage, true);
          if(kpage == NULL){
@@ -287,6 +295,9 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
             exit(-1);
          }
          spte->status = LOAD;
+         break;
+      default:
+         printf("default\n");
          break;
       }
    // ASSERT(kpage != NULL);

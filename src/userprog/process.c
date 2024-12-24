@@ -646,27 +646,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       spte->offset = ofs;
       spte->read_bytes = page_read_bytes;
       spte->zero_bytes = page_zero_bytes;
-      // printf("writable: %d\n", writable);
-
-      // memory에 load하는 것은 page fault가 발생했을 때 처리함
-      
-      // /* Load this page. */
-      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-      //   {
-      //     // palloc_free_page (kpage);
-      //     frame_free(kpage);
-      //     return false; 
-      //   }
-      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      // /* Add the page to the process's address space. */
-      // if (!install_page (upage, kpage, writable)) 
-      //   {
-      //     // palloc_free_page (kpage);
-      //     frame_free(kpage);
-      //     return false; 
-      //   }
-
       //make spte and insert it to spt
       if(!spt_insert(spte)){
         free(spte);
