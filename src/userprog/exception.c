@@ -4,13 +4,13 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
 #include"userprog/syscall.h"
-
 #include"threads/vaddr.h"
+
 #include"vm/frame.h"
 #include"vm/page.h"
 #include"vm/swap.h"
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include "userprog/process.h"
@@ -171,7 +171,7 @@ page_fault (struct intr_frame *f)
 //           user ? "user" : "kernel");
 //   kill (f);
 
-   if(!is_valid_user_pointer(fault_addr)) {
+   if(is_kernel_vaddr(fault_addr)) {
       // Handle invalid access
       exit(-1);
    }
@@ -184,27 +184,41 @@ page_fault (struct intr_frame *f)
    // //upage is the page that fault_addr belongs to
    void *upage = pg_round_down(fault_addr);
    struct spt_entry *spte = spt_find(upage);
-
+   // printf("page_fault\n");
    // //PTE가 없는 경우
    if(spte == NULL){
       // Handle stack growth
-      // if(upage >= f->esp - 32 && upage >= PHYS_BASE - 0x800000){
-      //    void *kpage = frame_alloc(upage, true);
-      //    if(kpage == NULL){
-      //       exit(-1);
-      //    }
-      //    spte = malloc(sizeof(struct spt_entry));
-      //    if(spte == NULL){
-      //       frame_free(kpage);
-      //       exit(-1);
-      //    }
-      //    spte->upage = upage;
-      //    spte->status = ZERO;
-      //    spte->writable = true;
-      //    spt_insert(spte);
-      //    return;
-      // }
-      exit(-1);
+      //upage가 stack의 page인 경우
+      // printf("stack growth\n");
+      // printf("Fault Address: %p\n", fault_addr);
+      // printf("Rounded Down Address (upage): %p\n", upage);
+      // printf("Stack Pointer (f->esp): %p\n", f->esp);
+      // printf("Physical Base (PHYS_BASE - 8MB): %p\n", PHYS_BASE - 8 * 1024 * 1024);
+      if(fault_addr >= f->esp - 32 && (PHYS_BASE - upage)<=   8 * 1024 * 1024){
+         // printf("Stack growth condition satisfied.\n");
+         void *kpage = frame_alloc(upage, true);
+         // printf("frame_alloc success\n");
+         if(kpage == NULL){
+            // printf("frame_alloc failed\n");
+            exit(-1);
+         }
+         spte = malloc(sizeof(struct spt_entry));
+         if(spte == NULL){
+            // printf("spte malloc failed\n");
+            frame_free(kpage);
+            exit(-1);
+         }
+         // printf("spte malloc success\n");
+         spte->upage = upage;
+         spte->status = ZERO;
+         spte->writable = true;
+         // printf("spte insert\n");
+         spt_insert(spte);
+         return;
+      }else{
+         // Handle invalid access
+         exit(-1);
+      }
    }
    //PTE가 있는 경우
    else{
@@ -213,15 +227,18 @@ page_fault (struct intr_frame *f)
 }
 
 void handle_mm_fault(struct spt_entry*spte, void *upage){
-   ASSERT(spte->status != LOAD);
+   if(spte->status == LOAD){
+      exit(-1);
+   }
    switch (spte->status)
    {
       //file에 존재하는 page의 경우
       //아직 memory에 load되지 않은 경우
+      void *kpage;
       case FILE:
          //physical frame을 할당받아서 file에서 읽어서 memory에 load 
-         void *kpage = frame_alloc(upage, false);
-         spte->writable = true;
+         kpage = frame_alloc(upage, false);
+         // spte->writable = true;
 
          if(kpage == NULL){
             exit(-1);
@@ -244,11 +261,34 @@ void handle_mm_fault(struct spt_entry*spte, void *upage){
             frame_free(kpage);
             exit(-1);
          }
-
          spte->status = LOAD;
          break;
-
-   }
+      case SWAP:
+         // printf("swap page \n");
+         //physical frame을 할당받아서 swap disk에서 읽어서 memory에 load
+         kpage = frame_alloc(upage, false);
+         if(kpage == NULL){
+            exit(-1);
+         }
+         if(!make_file_page(upage, kpage, spte->writable)){
+            frame_free(kpage);
+            exit(-1);
+         }
+         spte->status = LOAD;
+         break;
+      case ZERO:
+         //physical frame을 할당받아서 0으로 초기화
+         kpage = frame_alloc(upage, true);
+         if(kpage == NULL){
+            exit(-1);
+         }
+         if(!make_file_page(upage, kpage, spte->writable)){
+            frame_free(kpage);
+            exit(-1);
+         }
+         spte->status = LOAD;
+         break;
+      }
    // ASSERT(kpage != NULL);
    //restart process
 }

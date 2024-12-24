@@ -18,10 +18,10 @@ struct frame_table_entry {
     bool pinned;
 };
 
-
 /* Functions to manage the frame table */
 void frame_table_init(void);
 void *frame_alloc(uint8_t *page, bool zero);
 void frame_free(uint8_t *frame);
+void *frame_evict(void);
 
 #endif /* VM_FRAME_H */

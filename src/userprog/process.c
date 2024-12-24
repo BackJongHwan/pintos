@@ -203,6 +203,7 @@ process_exit (void)
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
+  spt_destroy(&cur->spt);
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -222,7 +223,6 @@ process_exit (void)
           file_close(cur->fd_table[i]);
       }
       //when process exit, free supplementary page table 
-      spt_destroy(&cur->spt);
     }
 }
 
@@ -646,6 +646,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       spte->offset = ofs;
       spte->read_bytes = page_read_bytes;
       spte->zero_bytes = page_zero_bytes;
+      // printf("writable: %d\n", writable);
 
       // memory에 load하는 것은 page fault가 발생했을 때 처리함
       
@@ -683,27 +684,44 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-static bool
-setup_stack (void **esp) 
-{
+static bool setup_stack(void **esp) {
   uint8_t *kpage;
-  bool success = false;
+  void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+  // printf("setup_stack\n");
+  kpage = frame_alloc(upage, PAL_USER | PAL_ZERO);
+  if (kpage == NULL) {
+    printf("Failed to allocate frame for stack page\n");
+    return false;
+  }
 
-  // kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  // frame_alloc을 이용하여 kpage를 할당 upage는 PHYS_BASE - PGSIZE stack은 위에서 아래로 증가하기 때문에
-  kpage = frame_alloc(((uint8_t *) PHYS_BASE) - PGSIZE, PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        // palloc_free_page (kpage);
-        frame_free(kpage);
-    }
-  return success;
+  if (!install_page(upage, kpage, true)) {
+    frame_free(kpage);
+    return false;
+  }
+
+  struct spt_entry *spte = malloc(sizeof(struct spt_entry));
+  if (spte == NULL) {
+    frame_free(kpage);
+    return false;
+  }
+
+  spte->upage = upage;
+  spte->status = LOAD; 
+  spte->writable = true;
+  spte->file = NULL;
+  spte->offset = 0;
+  spte->read_bytes = 0;
+  spte->zero_bytes = PGSIZE;
+
+  if (!spt_insert(spte)) {
+    free(spte);
+    frame_free(kpage);
+    return false;
+  }
+
+  *esp = PHYS_BASE;
+  return true;
 }
-
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
    If WRITABLE is true, the user process may modify the page;
